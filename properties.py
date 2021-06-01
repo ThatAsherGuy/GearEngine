@@ -86,6 +86,9 @@ class GearProps(PropertyGroup):
 
     def get_ratio(self):
         do_flip = False
+        if not self.drive_object.gear_data:
+            return 0.0
+
         if len(self.drive_object.gear_data.gears) > self.drive_gear_index:
             drive_gear = self.drive_object.gear_data.gears[self.drive_gear_index]
             if do_flip:

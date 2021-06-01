@@ -28,3 +28,6 @@ venv.bak/
 
 # Pyre type checker
 .pyre/
+
+# Misc
+.vscode
