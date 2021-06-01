@@ -145,3 +145,19 @@ class GE_OT_InitDrivers(bpy.types.Operator):
             driver.expression = '((flip * 2) - 1) * (ratio * angle)'
 
         return {'FINISHED'}
+
+
+class GE_OT_ToolTip(bpy.types.Operator):
+    """Use this operator to display inline tooltips."""
+    bl_idname = "ge.tool_tip"
+    bl_label = "Gear Tool Tip"
+    bl_description = "If you can read this, something is broken."
+
+    tooltip: bpy.props.StringProperty(default="")
+
+    @classmethod
+    def description(cls, context, properties):
+        return properties.tooltip
+
+    def execute(self, context):
+        return {'CANCELLED'}

@@ -29,6 +29,7 @@ from . operators import GE_OT_AddGearToSet
 from . operators import GE_OT_RemoveGear
 from . operators import GE_OT_AddMotor
 from . operators import GE_OT_InitDrivers
+from . operators import GE_OT_ToolTip
 
 from . interface import GE_PT_MainPanel
 
@@ -53,6 +54,7 @@ classes = [
     GE_OT_RemoveGear,
     GE_OT_InitDrivers,
     GE_OT_AddMotor,
+    GE_OT_ToolTip,
     # UI
     GE_PT_MainPanel,
     ]

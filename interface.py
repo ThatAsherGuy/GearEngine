@@ -88,6 +88,31 @@ class GE_PT_MainPanel(View3dPanel, bpy.types.Panel):
                 gear,
                 "name"
             )
+            box.prop(
+                gear,
+                "gear_type"
+            )
+            if gear.gear_type == 'PLANETARY':
+                row = box.row(align=True)
+                row.prop(
+                    gear,
+                    "planetary_subtype",
+                    text="Subtype"
+                )
+
+                if gear.planetary_subtype == 'PLANET':
+                    tip = row.operator("ge.tool_tip", text="", icon='INFO')
+                    tip.tooltip = "Drive this with a gear on the carrier"
+
+                if not gear.planetary_subtype == 'PLANET':
+                    row = box.row(align=True)
+                    row.prop(
+                        gear,
+                        "gear_mode",
+                        text="Drive Mode",
+                        expand=True
+                    )
+                
 
             box.prop(
                 gear,

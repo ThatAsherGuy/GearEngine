@@ -34,6 +34,63 @@ from bpy.props import (
     FloatProperty,
 )
 
+gear_types = [
+    ("SPUR", "Spur Gear", "Your standard round gear with teeth on it"),
+    ("PLANETARY", "Planetary Gear", "Not really a gear, but the math is different"),
+    ("WORM", "Worm Gear", "Looks like a screw")
+]
+
+planetary_subtypes = [
+    ("SUN", "Sun", ""),
+    ("PLANET", "Planet", ""),
+    ("RING", "Ring", ""),
+    ("CARRIER", "Carrier", "")
+]
+
+planetary_drive_modes = [
+    ('A', "A", "Sun input, carrier output, fixed ring"),
+    ('B', "B", "Ring Input, Carrier Output, Fixed Sun"),
+    ('C', "C", "Sun Input, Ring Output, Fixed Carrier"),
+]
+
+def calc_spur_ratio(drive_gear, target_gear, mode):
+    if (drive_gear.teeth == 0) or (target_gear.teeth == 0):
+        return -1.0
+    else:
+        return drive_gear.teeth/target_gear.teeth
+
+
+def calc_planetary_ratio(sun, ring, mode):
+    if (sun.teeth == 0) or (ring.teeth == 0):
+        return -1.0
+
+    if mode == 'A': # Sun Input, Carrier Output, Fixed Ring
+        return sun.teeth / (sun.teeth + ring.teeth)
+
+    elif mode == 'B': # Ring Input, Carrier Output, Fixed Sun
+        return 1 + (sun.teeth/ring.teeth)
+
+    elif mode == 'C': # Sun Input, Ring Output, Fixed Carrier
+        return -(ring.teeth/sun.teeth)
+
+    else:
+        return -1.0
+
+
+def calc_worm_ratio(worm, spur, mode):
+    if (worm.teeth == 0) or (spur.teeth == 0):
+        return -1.0
+
+    return worm.teeth/spur.teeth # worm.teeth being the number of thread starts
+
+
+ratio_dict = {
+    "SPUR": calc_spur_ratio,
+    "PLANETARY": calc_planetary_ratio,
+    "WORM": calc_worm_ratio,
+}
+
+
 class GearProps(PropertyGroup):
     name: StringProperty(
         name="Gear Name",
@@ -84,16 +141,41 @@ class GearProps(PropertyGroup):
         default=False,
     )
 
+    gear_type: EnumProperty(
+        items=gear_types,
+        name="Gear Type",
+        description="Determines how the gear ratio is calculated",
+        default='SPUR'
+    )
+
+    gear_mode: EnumProperty(
+        items=planetary_drive_modes,
+        name="Planetary Drive Mode",
+        default='A'
+    )
+ 
+    planetary_subtype: EnumProperty(
+        items=planetary_subtypes,
+        name="Planetary Subtype",
+        description="What role this gear plays in a planetary assemblage"
+    )
+
     def get_ratio(self):
+        if (self.gear_type == 'PLANETARY') and (self.planetary_subtype == 'PLANET'):
+            ratio_func = ratio_dict["SPUR"]
+        else:
+            ratio_func = ratio_dict[self.gear_type]
+
         if not self.drive_object:
             return 0.0
 
         if not self.drive_object.gear_data:
             return -1.0
 
-        if len(self.drive_object.gear_data.gears) > self.drive_gear_index:
+        if len(self.drive_object.gear_data.gears) > self.drive_gear_index: 
             drive_gear = self.drive_object.gear_data.gears[self.drive_gear_index]
-            return drive_gear.teeth/self.teeth
+
+            return ratio_func(drive_gear, self, self.gear_mode)
         else:
             return -1.0
 
