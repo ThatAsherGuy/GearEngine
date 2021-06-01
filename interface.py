@@ -52,6 +52,11 @@ class GE_PT_MainPanel(View3dPanel, bpy.types.Panel):
             text="Add Gear"
         )
 
+        op = root.operator(
+            "ge.init_drivers",
+            text="Refresh Gear Driver"
+        )
+
         root.separator()
 
         if obj.gear_data.motor.enabled:
@@ -96,12 +101,20 @@ class GE_PT_MainPanel(View3dPanel, bpy.types.Panel):
 
             box.separator()
 
-            box.prop(
+            row = box.row(align=True)
+
+            if gear.drive_ratio == -1.0:
+                err = row.row(align=True)
+                err.alert =True
+                err.label(text="", icon='ERROR')
+
+            row.prop(
                 gear,
                 "drive_object"
             )
 
             if gear.drive_object:
+
                 box.prop(
                     gear,
                     "drive_gear_index"

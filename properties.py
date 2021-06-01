@@ -55,7 +55,7 @@ class GearProps(PropertyGroup):
     )
 
     space: IntProperty(
-        name="Trnasform Space",
+        name="Transform Space",
         default=0
     )
 
@@ -81,22 +81,21 @@ class GearProps(PropertyGroup):
 
     flip: BoolProperty(
         name="Flip Direction",
-        default=True,
+        default=False,
     )
 
     def get_ratio(self):
-        do_flip = False
-        if not self.drive_object.gear_data:
+        if not self.drive_object:
             return 0.0
+
+        if not self.drive_object.gear_data:
+            return -1.0
 
         if len(self.drive_object.gear_data.gears) > self.drive_gear_index:
             drive_gear = self.drive_object.gear_data.gears[self.drive_gear_index]
-            if do_flip:
-                return ((self.flip * 2) - 1) * (drive_gear.teeth/self.teeth)
-            else:
-                return drive_gear.teeth/self.teeth
+            return drive_gear.teeth/self.teeth
         else:
-            return 0.0
+            return -1.0
 
     drive_ratio: FloatProperty(
         name="Drive Ratio",
