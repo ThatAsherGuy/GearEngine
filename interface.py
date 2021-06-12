@@ -30,6 +30,7 @@ class View3dPanel:
         if context.view_layer.objects.active:
             return True
 
+
 class GE_PT_MainPanel(View3dPanel, bpy.types.Panel):
     bl_idname = "GE_PT_MainPanel"
     bl_label = "Gear Settings"
@@ -40,41 +41,48 @@ class GE_PT_MainPanel(View3dPanel, bpy.types.Panel):
 
         root = layout.column(align=True)
 
-        if obj.rotation_mode == 'QUATERNION':
-            root.prop(obj, 'delta_rotation_quaternion', index=3, text='Delta Rotation')
-        elif not obj.rotation_mode == 'AXIS_ANGLE':
-            root.prop(obj, 'delta_rotation_euler', index=2, text='Delta Rotation')
-
-        root.prop(obj, 'show_axis', text="Show Axis")
-
         op = root.operator(
             "ge.add_gear_to_set",
             text="Add Gear"
         )
 
-        op = root.operator(
+        row = root.row(align=True)
+        row.prop(obj.gear_data, "drive_mode", text="")
+        op = row.operator(
             "ge.init_drivers",
-            text="Refresh Gear Driver"
+            text="",
+            icon='FILE_REFRESH'
         )
 
         root.separator()
 
-        if obj.gear_data.motor.enabled:
-            box = root.box()
-            box = box.column(align=True)
-            box.use_property_split = True
+        col = root.column(align=True)
+        col.use_property_split = True
+        col.use_property_decorate = False
 
-            box.label(text='Motor Settings')
+        # if obj.rotation_mode == 'QUATERNION':
+        #     col.prop(obj, 'delta_rotation_quaternion', index=3, text='Delta Rotation')
+        # elif not obj.rotation_mode == 'AXIS_ANGLE':
+        #     col.prop(obj, 'delta_rotation_euler', index=2, text='Delta Rotation')
 
-            box.prop(obj.gear_data.motor, 'enabled')
-            box.prop(obj.gear_data.motor, 'speed')
+        # col.prop(obj, 'show_axis', text="Show Axis")
+
+        col.prop(obj.gear_data, "drive_object")
+        col.prop(obj.gear_data, "drive_gear")
+        col.prop(obj.gear_data, "driven_gear")
+
+        col.separator()
+
+        root.label(text="Gear Rings:")
 
         for i, gear in enumerate(obj.gear_data.gears):
             box = root.box()
             box = box.column(align=True)
+            box.use_property_decorate = False
+            box.use_property_split = True
 
             header = box.row(align=True)
-            header.label(text="Gear " + str(i))
+            header.label(text="Ring " + str(i))
             op = header.operator(
                 "ge.remove_gear",
                 text="",
@@ -82,79 +90,91 @@ class GE_PT_MainPanel(View3dPanel, bpy.types.Panel):
             )
             op.index = i
 
-            box.use_property_split = True
-
-            box.prop(
-                gear,
-                "name"
-            )
-            box.prop(
-                gear,
-                "gear_type"
-            )
-            if gear.gear_type == 'PLANETARY':
-                row = box.row(align=True)
-                row.prop(
-                    gear,
-                    "planetary_subtype",
-                    text="Subtype"
-                )
-
-                if gear.planetary_subtype == 'PLANET':
-                    tip = row.operator("ge.tool_tip", text="", icon='INFO')
-                    tip.tooltip = "Drive this with a gear on the carrier"
-
-                if not gear.planetary_subtype == 'PLANET':
-                    row = box.row(align=True)
-                    row.prop(
-                        gear,
-                        "gear_mode",
-                        text="Drive Mode",
-                        expand=True
-                    )
-                
-
-            box.prop(
-                gear,
-                "teeth"
-            )
-
-            box.prop(
-                gear,
-                "axis"
-            )
-
+            box.prop(gear, "name")
+            box.prop(gear, "teeth")
+            row = box.row(align=True)
+            row.prop(gear, "axis", expand=True)
             box.separator()
 
+            if obj.gear_data.drive_object:
+
+                row = box.row(align=True)
+                row.prop(gear, "gear_type")
+
+                if gear.gear_type == 'PLANETARY':
+                    row.prop(gear, "planetary_subtype", text="")
+
+                    if gear.planetary_subtype == 'PLANET':
+                        tip = row.operator("ge.tool_tip", text="", icon='INFO')
+                        tip.tooltip = "Drive this with a gear on the carrier"
+
+                    if not gear.planetary_subtype == 'PLANET':
+                        row = box.row(align=True)
+                        row.prop(
+                            gear,
+                            "gear_mode",
+                            text="Drive Mode",
+                            expand=True
+                        )
+
+
             row = box.row(align=True)
+            row.prop(gear, "drive_ratio")
 
             if gear.drive_ratio == -1.0:
                 err = row.row(align=True)
                 err.alert =True
                 err.label(text="", icon='ERROR')
 
-            row.prop(
+            box.prop(
                 gear,
-                "drive_object"
+                "flip",
+                invert_checkbox=True
             )
 
-            if gear.drive_object:
 
-                box.prop(
-                    gear,
-                    "drive_gear_index"
-                )
+class GE_PT_MotorPanel(View3dPanel, bpy.types.Panel):
+    bl_idname = "GE_PT_MotorPanel"
+    bl_label = "Gear Motor"
+    bl_parent_id = "GE_PT_MainPanel"
 
-                drive_obj_gears = gear.drive_object.gear_data.gears
-                if len(drive_obj_gears) > gear.drive_gear_index:
-                    box.prop(
-                        gear,
-                        "drive_ratio"
-                    )
+    def draw_header(self, context):
+        layout = self.layout
+        obj = context.view_layer.objects.active
+        root = layout.row(align=True)
+        root.prop(obj.gear_data.motor, 'enabled', text="")
 
-                box.prop(
-                    gear,
-                    "flip",
-                    invert_checkbox=True
-                )
 
+    def draw(self, context):
+        layout = self.layout
+        obj = context.view_layer.objects.active
+
+        root = layout.column(align=True)
+        root.use_property_split = True
+        root.use_property_decorate = False
+        root.prop(obj.gear_data.motor, 'speed')
+
+        row = root.row(align=True)
+        row.prop(obj.gear_data.motor, 'axis', expand=True)\
+
+
+class GE_PT_HelpPanel(View3dPanel, bpy.types.Panel):
+    bl_idname = "GE_PT_HelpPanel"
+    bl_label = "Gear HALP"
+    bl_parent_id = "GE_PT_MainPanel"
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.view_layer.objects.active
+
+        root = layout.column(align=True)
+        root.scale_y = 0.75
+        root.use_property_split = True
+        root.use_property_decorate = False
+
+        root.label(text="How To Planetary Gear:")
+        root.label(text="If the carrier spins, drive the planets with it.")
+        root.label(text="Otherwise, drive them with the ring.")
+        root.label(text="Use the ring's tooth count for the drive gear.")
+
+        

@@ -34,6 +34,12 @@ from bpy.props import (
     FloatProperty,
 )
 
+rot_axes = [
+    ('X', "X", ""),
+    ('Y', "Y", ""),
+    ('Z', "Z", "")
+]
+
 gear_types = [
     ("SPUR", "Spur Gear", "Your standard round gear with teeth on it"),
     ("PLANETARY", "Planetary Gear", "Not really a gear, but the math is different"),
@@ -48,9 +54,13 @@ planetary_subtypes = [
 ]
 
 planetary_drive_modes = [
-    ('A', "A", "Sun input, carrier output, fixed ring"),
-    ('B', "B", "Ring Input, Carrier Output, Fixed Sun"),
-    ('C', "C", "Sun Input, Ring Output, Fixed Carrier"),
+    ('A', "A", "Sun Input, Fixed Carrier, Ring Output"),
+    ('B', "B", "Ring Input, Fixed Carrier, Sun Output"),
+    ('C', "C", "Carrier Input, Fixed Sun, Ring Output"),
+    ('D', "D", "Ring Input, Fixed Sun, Carrier Output"),
+    ('E', "E", "Sun Input, Fixed Ring, Carrier Output"),
+    ('F', "F", "Carrier Input, Fixed Ring, Sun Output"),
+
 ]
 
 def calc_spur_ratio(drive_gear, target_gear, mode):
@@ -59,19 +69,30 @@ def calc_spur_ratio(drive_gear, target_gear, mode):
     else:
         return drive_gear.teeth/target_gear.teeth
 
-
+# a = Ring/Sun
 def calc_planetary_ratio(sun, ring, mode):
     if (sun.teeth == 0) or (ring.teeth == 0):
         return -1.0
 
-    if mode == 'A': # Sun Input, Carrier Output, Fixed Ring
-        return sun.teeth / (sun.teeth + ring.teeth)
+    a = ring.teeth/sun.teeth
 
-    elif mode == 'B': # Ring Input, Carrier Output, Fixed Sun
-        return 1 + (sun.teeth/ring.teeth)
+    if mode == 'A': # SCR | -a
+        return -a
 
-    elif mode == 'C': # Sun Input, Ring Output, Fixed Carrier
-        return -(ring.teeth/sun.teeth)
+    elif mode == 'B': # RCS | -1/a
+        return -1/a
+
+    elif mode == 'C': # CSR | a/(1 + a)
+        return a / (1 + a)
+
+    elif mode == 'D': # RSC | (1 + a)/a
+        return (1 + a)/a
+
+    elif mode == 'E': # SRC | (1 + a)
+        return 1 + a
+
+    elif mode == 'F': # CRS | 1 * (1 + a)
+        return 1 * (1 + a)
 
     else:
         return -1.0
@@ -104,36 +125,15 @@ class GearProps(PropertyGroup):
         options={'PROPORTIONAL'}
     )
 
-    axis: IntProperty(
+    axis: EnumProperty(
+        items=rot_axes,
         name="Rotation Axis",
-        default=2,
-        min=0,
-        max=2
-    )
-
-    space: IntProperty(
-        name="Transform Space",
-        default=0
+        default='Z'
     )
 
     drive_object: PointerProperty(
         type=bpy.types.Object,
         name="Drive Object",
-    )
-
-    drive_gear: StringProperty(
-        name="Drive Gear",
-        default=""
-    )
-
-    def set_drive_index(self, val):
-        self["drive_gear_index"] = val
-        self.parent_obj.gear_data.driven_gear_index 
-
-    drive_gear_index: IntProperty(
-        name="Drive Gear",
-        default=0,
-        min=0
     )
 
     flip: BoolProperty(
@@ -161,23 +161,27 @@ class GearProps(PropertyGroup):
     )
 
     def get_ratio(self):
+        parent = self.id_data
+
         if (self.gear_type == 'PLANETARY') and (self.planetary_subtype == 'PLANET'):
             ratio_func = ratio_dict["SPUR"]
         else:
             ratio_func = ratio_dict[self.gear_type]
+        
+        if hasattr(parent, 'gear_data'):
+            if not parent.gear_data.drive_object:
+                return 0.0
 
-        if not self.drive_object:
-            return 0.0
+            if parent.gear_data.drive_gear == -1:
+                return -1.0
 
-        if not self.drive_object.gear_data:
-            return -1.0
+            drive_obj = parent.gear_data.drive_object
 
-        if len(self.drive_object.gear_data.gears) > self.drive_gear_index: 
-            drive_gear = self.drive_object.gear_data.gears[self.drive_gear_index]
-
-            return ratio_func(drive_gear, self, self.gear_mode)
-        else:
-            return -1.0
+            if len(drive_obj.gear_data.gears) > parent.gear_data.drive_gear:
+                drive_gear = drive_obj.gear_data.gears[parent.gear_data.drive_gear]
+                return ratio_func(drive_gear, self, self.gear_mode)
+            else:
+                return -1.0
 
     drive_ratio: FloatProperty(
         name="Drive Ratio",
@@ -189,7 +193,10 @@ class GearProps(PropertyGroup):
         name="Parent Object"
     )
 
+
 class MotorProps(PropertyGroup):
+    show_motor = False
+
     speed: FloatProperty(
         name="Speed",
         default=1.0,
@@ -197,10 +204,17 @@ class MotorProps(PropertyGroup):
         soft_max=50.0
     )
 
+    axis: EnumProperty(
+        items=rot_axes,
+        name="Axis"
+    )
+
     enabled: BoolProperty(
         name="Enabled",
-        default=False
+        description="Whether the motor is enabled",
+        default=False,
     )
+
 
 class GearSet(PropertyGroup):
 
@@ -209,17 +223,58 @@ class GearSet(PropertyGroup):
         name="Gears",
     )
 
-    driven_gear_index: IntProperty(
-        name="Drive Index",
-        default=-1
-    )
-
-    system: StringProperty(
-        name="Gear System",
-        default=""
-    )
-
     motor: PointerProperty(
         type=MotorProps,
         name="Motor Properties"
     )
+
+    def get_fps(self):
+        return bpy.context.scene.render.fps
+
+    fps: FloatProperty(
+        name="Framerate",
+        get=get_fps
+    )
+
+    # DRIVE info
+
+    drive_mode_items = [
+        ('DRIVER', "Driver-based",
+            ("In this mode, the gear is driven by a driver. "
+             "It's easy to work with for quick setups, "
+             "but you might need to get tricky with parenting and "
+             "axis-orders in order to make it work in local space")),
+
+        ('CONSTRAINT', "Constraint-based",
+            ("In this mode, the gear is driven by a constraint. "
+             "This makes it easy to setup gears that rotate on weird axes "
+             "but it can be harder to hand-tweak, since the final transform isn't visible")) 
+    ]
+
+    drive_mode: EnumProperty(
+        items=drive_mode_items,
+        name="Drive Mode",
+        description="Controls whether the gear's movement is powered by drivers or constraints",
+        options=set(),
+        default='DRIVER'
+    )
+
+    drive_object: PointerProperty(
+        type=bpy.types.Object,
+        name="Drive Object",
+    )
+
+    drive_gear: IntProperty(
+        name="Input Ring",
+        description="The index of the gear ring on the drive object that rotates this object",
+        default=-1,
+        min=-1
+    )
+
+    driven_gear: IntProperty(
+        name="Output Ring",
+        description="The index of the gear ring on this object that engages with the drive object",
+        default=-1,
+        min=-1
+    )
+

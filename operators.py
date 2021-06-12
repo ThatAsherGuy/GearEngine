@@ -19,6 +19,7 @@
 # Hell is other people's code.
 
 import bpy
+import math
 import bpy_extras
 from bpy.props import (
     BoolProperty, IntProperty,
@@ -26,8 +27,14 @@ from bpy.props import (
     EnumProperty
 )
 
+axis_map = {
+    "X": 0,
+    "Y": 1,
+    "Z": 2
+}
+
 class GE_OT_AddGearToSet(bpy.types.Operator):
-    """Collection Property Handling"""
+    """Adds a ring of teeth to the selected gear"""
     bl_idname = "ge.add_gear_to_set"
     bl_label = "Add Gear to Set"
 
@@ -69,19 +76,32 @@ class GE_OT_AddMotor(bpy.types.Operator):
     bl_idname = 'ge.add_motor'
     bl_label = 'Add Motor'
 
+    axis: EnumProperty(
+        items=[
+            ('X', "X", ""),
+            ('Y', "Y", ""),
+            ('Z', "Z", "")],
+            name="Axis",
+            default='Z'
+    )
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self)
+
     def execute(self, context):
         if not context.active_object:
             return {'CANCELLED'}
 
         obj = context.active_object
-        fcurve = obj.driver_add('rotation_euler', 2)
+        fcurve = obj.driver_add('rotation_euler', axis_map[self.axis])
         driver = fcurve.driver
 
         var = driver.variables.new()
         var.name = 'FPS'
-        var.targets[0].id_type = 'SCENE'
-        var.targets[0].id = context.scene
-        var.targets[0].data_path = 'render.fps'
+        var.targets[0].id_type = 'OBJECT'
+        var.targets[0].id = obj
+        var.targets[0].data_path = 'gear_data.fps'
 
         var = driver.variables.new()
         var.name = 'speed'
@@ -92,6 +112,7 @@ class GE_OT_AddMotor(bpy.types.Operator):
         driver.expression = '(frame/FPS) * speed'
 
         obj.gear_data.motor.enabled = True
+        bpy.ops.ge.add_gear_to_set()
 
         return {'FINISHED'}
 
@@ -112,37 +133,86 @@ class GE_OT_InitDrivers(bpy.types.Operator):
             if len(obj.gear_data.gears) == 0:
                 continue
 
-            main_gear = None
-            for gear in obj.gear_data.gears:
-                if gear.drive_object:
-                    main_gear = gear
-                    break
-
-            if not main_gear:
-                break
-
-            fcurve = obj.driver_add('rotation_euler', gear.axis)
+            main_gear = obj.gear_data.gears[obj.gear_data.driven_gear]
+            fcurve = obj.driver_add('rotation_euler', axis_map[main_gear.axis])
             driver = fcurve.driver
 
-            var = driver.variables.new()
+            if 'ratio' in driver.variables:
+                var = driver.variables.get('ratio')
+            else:
+                var = driver.variables.new()
             var.name = 'ratio'
             var.targets[0].id_type = 'OBJECT'
             var.targets[0].id = obj
             var.targets[0].data_path = 'gear_data.gears[0].drive_ratio'
 
-            var = driver.variables.new()
+            if 'flip' in driver.variables:
+                var = driver.variables.get('flip')
+            else:
+                var = driver.variables.new()
             var.name = 'flip'
             var.targets[0].id_type = 'OBJECT'
             var.targets[0].id = obj
             var.targets[0].data_path = 'gear_data.gears[0].flip'
 
-            var = driver.variables.new()
+            if 'angle' in driver.variables:
+                var = driver.variables.get('angle')
+            else:
+                var = driver.variables.new()
             var.name = 'angle'
             var.targets[0].id_type = 'OBJECT'
-            var.targets[0].id = main_gear.drive_object
+            var.targets[0].id = obj.gear_data.drive_object
             var.targets[0].data_path = 'rotation_euler[2]'
 
             driver.expression = '((flip * 2) - 1) * (ratio * angle)'
+
+        return {'FINISHED'}
+
+
+# TODO: Add drivers to the constraint properties, so it all updates live.
+class GE_OT_InitConstraint(bpy.types.Operator):
+    """Does the initial Driver Wrangling"""
+    bl_idname = "ge.init_constraint"
+    bl_label = "Initialize Gear Constraint"
+
+    do_all: BoolProperty(
+        name="Initialize All",
+        description="Only initiializes drivers for the selected objects when false",
+        default=False
+    )
+
+    def execute(self, context):
+        for obj in context.selected_editable_objects:
+            if len(obj.gear_data.gears) == 0:
+                continue
+
+            main_gear = obj.gear_data.gears[obj.gear_data.driven_gear]
+            drive_obj = obj.gear_data.drive_object
+            drive_gear = drive_obj.gear_data.gears[obj.gear_data.drive_gear]
+
+            constraint = obj.constraints.new('TRANSFORM')
+
+            constraint.target = obj.gear_data.drive_object
+            constraint.use_motion_extrapolate = True
+
+            constraint.map_from ='ROTATION'
+
+            if drive_gear.axis == 'X':
+                constraint.from_max_x_rot = math.radians(360)
+            elif drive_gear.axis == 'Y':
+                constraint.from_max_y_rot = math.radians(360)
+            else:
+                constraint.from_max_z_rot = math.radians(360)
+
+            constraint.map_to = 'ROTATION'
+
+            if main_gear.axis == 'X':
+                constraint.to_max_x_rot = -math.radians(360) * main_gear.drive_ratio
+            elif main_gear.axis == 'Y':
+                constraint.to_max_y_rot = -math.radians(360) * main_gear.drive_ratio
+            else:
+                constraint.to_max_z_rot = -math.radians(360) * main_gear.drive_ratio
+
 
         return {'FINISHED'}
 

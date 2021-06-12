@@ -29,9 +29,12 @@ from . operators import GE_OT_AddGearToSet
 from . operators import GE_OT_RemoveGear
 from . operators import GE_OT_AddMotor
 from . operators import GE_OT_InitDrivers
+from . operators import GE_OT_InitConstraint
 from . operators import GE_OT_ToolTip
 
 from . interface import GE_PT_MainPanel
+from . interface import GE_PT_MotorPanel
+from . interface import GE_PT_HelpPanel
 
 bl_info = {
     "name" : "GearEngine",
@@ -53,10 +56,13 @@ classes = [
     GE_OT_AddGearToSet,
     GE_OT_RemoveGear,
     GE_OT_InitDrivers,
+    GE_OT_InitConstraint,
     GE_OT_AddMotor,
     GE_OT_ToolTip,
     # UI
     GE_PT_MainPanel,
+    GE_PT_MotorPanel,
+    GE_PT_HelpPanel,
     ]
 
 def register():
