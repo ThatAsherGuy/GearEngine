@@ -24,6 +24,7 @@ from bpy.props import PointerProperty
 from . properties import GearProps
 from . properties import GearSet
 from . properties import MotorProps
+from . properties import DriverProps
 
 from . operators import GE_OT_AddGearToSet
 from . operators import GE_OT_RemoveGear
@@ -52,6 +53,7 @@ classes = [
     GearProps,
     MotorProps,
     GearSet,
+    DriverProps,
     # Ops
     GE_OT_AddGearToSet,
     GE_OT_RemoveGear,

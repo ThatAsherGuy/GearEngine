@@ -160,7 +160,14 @@ class GearProps(PropertyGroup):
         description="What role this gear plays in a planetary assemblage"
     )
 
+    ratio_err: StringProperty(
+        name="Error Message",
+        default=""
+    )
+
     def get_ratio(self):
+        # backpointer to the object the property is attached to.
+        # Not all properties have one of these, for some reason.
         parent = self.id_data
 
         if (self.gear_type == 'PLANETARY') and (self.planetary_subtype == 'PLANET'):
@@ -170,9 +177,13 @@ class GearProps(PropertyGroup):
         
         if hasattr(parent, 'gear_data'):
             if not parent.gear_data.drive_object:
+                self.ratio_err = "No drive object"
                 return 0.0
 
+            # property collections don't like it when you try to access
+            # their last member via some_prop[-1], so we do a soft fail
             if parent.gear_data.drive_gear == -1:
+                self.ratio_err = "Invalid index. Set the Input Ring"
                 return -1.0
 
             drive_obj = parent.gear_data.drive_object
@@ -181,6 +192,7 @@ class GearProps(PropertyGroup):
                 drive_gear = drive_obj.gear_data.gears[parent.gear_data.drive_gear]
                 return ratio_func(drive_gear, self, self.gear_mode)
             else:
+                self.ratio_err = "Invalid index. Input Ring doesn't exist"
                 return -1.0
 
     drive_ratio: FloatProperty(
@@ -266,15 +278,45 @@ class GearSet(PropertyGroup):
 
     drive_gear: IntProperty(
         name="Input Ring",
-        description="The index of the gear ring on the drive object that rotates this object",
+        description="The index of the gear ring on the _Drive Object_ that rotates this object",
         default=-1,
         min=-1
     )
 
     driven_gear: IntProperty(
         name="Output Ring",
-        description="The index of the gear ring on this object that engages with the drive object",
+        description="The index of the gear ring on _This Object_ that engages with the drive object",
         default=-1,
         min=-1
     )
 
+    driver_type_items = [
+        ('OBJ', "Object", "The rotation is driven by the rotation of another object, such as a gear or drive shaft"),
+        ('MOTOR', "Motor", "The rotation is driven directly via a 'motor' driver.")
+    ]
+
+    driver_type: EnumProperty(
+        items=driver_type_items,
+        name="Driver Type",
+        description="Sets whether the gear's rotation comes from another object, or a motor",
+        default='OBJ'
+    )
+
+# NOT IMPLEMENTED
+# Turns out you can't stick a property group on a driver
+class DriverProps(PropertyGroup):
+    driver_type_items = [
+        ('MOTOR', "Motor", ""),
+        ('GEAR', "Gear", ""),
+        ('SYNCRO', "Syncro", ""),
+        ('MISC', "Misc", "")
+    ]
+
+    driver_type: EnumProperty(
+        name="Type",
+        description=(
+            "The driver meta-type. "
+            "This is referenced by the Driver Refresh operator"),
+        items=driver_type_items,
+        default='MISC'
+    )

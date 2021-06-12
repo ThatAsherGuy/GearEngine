@@ -94,8 +94,28 @@ class GE_OT_AddMotor(bpy.types.Operator):
             return {'CANCELLED'}
 
         obj = context.active_object
-        fcurve = obj.driver_add('rotation_euler', axis_map[self.axis])
-        driver = fcurve.driver
+        do_destructive = True
+        driver = None
+
+        if obj.animation_data:
+            if len(obj.animation_data.drivers) > 0:
+                target = ("rotation_euler['%s']" % axis_map[self.axis])
+                do = False
+                prune = []
+
+                for d in obj.animation_data.drivers:
+                    if d.data_path == target:
+                        driver = d
+                    elif do_destructive:
+                        if 'rotation_euler' in d.data_path:
+                            prune.append(d)
+                        
+                for d in prune:
+                    obj.animation_data.drivers.remove(d)
+
+        if not driver:
+            fcurve = obj.driver_add('rotation_euler', axis_map[self.axis])
+            driver = fcurve.driver
 
         var = driver.variables.new()
         var.name = 'FPS'
@@ -112,7 +132,8 @@ class GE_OT_AddMotor(bpy.types.Operator):
         driver.expression = '(frame/FPS) * speed'
 
         obj.gear_data.motor.enabled = True
-        bpy.ops.ge.add_gear_to_set()
+        if len(obj.gear_data.gears) < 1:
+            bpy.ops.ge.add_gear_to_set()
 
         return {'FINISHED'}
 
@@ -130,41 +151,75 @@ class GE_OT_InitDrivers(bpy.types.Operator):
 
     def execute(self, context):
         for obj in context.selected_editable_objects:
+            if not hasattr(obj, "gear_data"):
+                continue
+
             if len(obj.gear_data.gears) == 0:
                 continue
 
             main_gear = obj.gear_data.gears[obj.gear_data.driven_gear]
-            fcurve = obj.driver_add('rotation_euler', axis_map[main_gear.axis])
-            driver = fcurve.driver
+            do_destructive = True
 
-            if 'ratio' in driver.variables:
-                var = driver.variables.get('ratio')
+            if obj.rotation_mode in {'QUATERNION', 'AXIS_ANGLE'}:
+                print("%s mode not handled yet" % obj.rotation_mode)
+                return {'CANCELLED'}
+
+            if obj.gear_data.driver_type == 'MOTOR':
+                bpy.ops.ge.add_motor()
             else:
-                var = driver.variables.new()
-            var.name = 'ratio'
-            var.targets[0].id_type = 'OBJECT'
-            var.targets[0].id = obj
-            var.targets[0].data_path = 'gear_data.gears[0].drive_ratio'
+                driver = None
 
-            if 'flip' in driver.variables:
-                var = driver.variables.get('flip')
-            else:
-                var = driver.variables.new()
-            var.name = 'flip'
-            var.targets[0].id_type = 'OBJECT'
-            var.targets[0].id = obj
-            var.targets[0].data_path = 'gear_data.gears[0].flip'
+                # Since drivers are per-axis, if we're changing what axis it rotates around
+                # we need to look for other drivers to remove before adding a new one
+                # WARNING: This is a fairly destructive process
+                if obj.animation_data:
+                    if len(obj.animation_data.drivers) > 0:
+                        target = ("rotation_euler['%s']" % axis_map[main_gear.axis])
+                        do = False
+                        prune = []
 
-            if 'angle' in driver.variables:
-                var = driver.variables.get('angle')
-            else:
-                var = driver.variables.new()
-            var.name = 'angle'
-            var.targets[0].id_type = 'OBJECT'
-            var.targets[0].id = obj.gear_data.drive_object
-            var.targets[0].data_path = 'rotation_euler[2]'
+                        for d in obj.animation_data.drivers:
+                            if d.data_path == target:
+                                driver = d
+                            elif do_destructive:
+                                if 'rotation_euler' in d.data_path:
+                                    prune.append(d)
+                                
+                        for d in prune:
+                            obj.animation_data.drivers.remove(d)
 
-            driver.expression = '((flip * 2) - 1) * (ratio * angle)'
+                if not driver:
+                    fcurve = obj.driver_add('rotation_euler', axis_map[main_gear.axis])
+                    driver = fcurve.driver
+
+                if 'ratio' in driver.variables:
+                    var = driver.variables.get('ratio')
+                else:
+                    var = driver.variables.new()
+                var.name = 'ratio'
+                var.targets[0].id_type = 'OBJECT'
+                var.targets[0].id = obj
+                var.targets[0].data_path = 'gear_data.gears[0].drive_ratio'
+
+                if 'flip' in driver.variables:
+                    var = driver.variables.get('flip')
+                else:
+                    var = driver.variables.new()
+                var.name = 'flip'
+                var.targets[0].id_type = 'OBJECT'
+                var.targets[0].id = obj
+                var.targets[0].data_path = 'gear_data.gears[0].flip'
+
+                if 'angle' in driver.variables:
+                    var = driver.variables.get('angle')
+                else:
+                    var = driver.variables.new()
+                var.name = 'angle'
+                var.targets[0].id_type = 'OBJECT'
+                var.targets[0].id = obj.gear_data.drive_object
+                var.targets[0].data_path = 'rotation_euler[2]'
+
+                driver.expression = '((flip * 2) - 1) * (ratio * angle)'
 
         return {'FINISHED'}
 
@@ -183,6 +238,9 @@ class GE_OT_InitConstraint(bpy.types.Operator):
 
     def execute(self, context):
         for obj in context.selected_editable_objects:
+            if not hasattr(obj, "gear_data"):
+                continue
+
             if len(obj.gear_data.gears) == 0:
                 continue
 
